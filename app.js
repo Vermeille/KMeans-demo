@@ -1,4 +1,4 @@
-let { KMeans, XMeans } = require('kmeans');
+let { KMeans, KMeansOptimizer, XMeans } = require('kmeans');
 let React = require('react');
 let ReactDOM = require('react-dom');
 

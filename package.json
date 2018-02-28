@@ -22,7 +22,7 @@
   },
   "homepage": "https://github.com/Vermeille/KMeans-demo#readme",
   "dependencies": {
-    "kmeans": "github:Vermeille/kmeans",
+    "kmeans": "github:Vermeille/KMeans",
     "react": "^16.2.0"
   },
   "devDependencies": {
