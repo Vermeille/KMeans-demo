@@ -325,6 +325,9 @@ class App extends React.Component {
                     </button>
                     <XMeansParams onChange={p => this.onXMParamsChange(p)}/>
                     <KMeansParams onChange={p => this.onKMParamsChange(p)}/>
+                    <a href="https://github.com/Vermeille/KMeans">
+                        Based on Vermeille/KMeans
+                    </a>
                 </div>
                 <div style={{position: 'relative',
                             borderStyle: 'solid',
