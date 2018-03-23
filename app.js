@@ -1,246 +1,82 @@
-let { KMeans, KMeansOptimizer, XMeans } = require('kmeans');
-let React = require('react');
-let ReactDOM = require('react-dom');
+const { KMeans, KMeansOptimizer, XMeans } = require('kmeans');
+const React = require('react');
+const ReactDOM = require('react-dom');
+const ParamsUI = require('./src/ParamsUI.js');
+const GaussianSampler = require('./src/GaussianSampler.js');
+const NormalDistribution2D = require('./src/NormalDistribution2D.js');
 
-let DataPoint = function (props) {
-    return (
-        <div style={{
-            position: 'absolute',
-            backgroundColor: props.color,
-            borderRadius: props.size || "5px",
-            width: props.size || "5px",
-            height: props.size || "5px",
-            'top': Math.round(props.y),
-            left: Math.round(props.x)
-            }}>
-        </div>
-    );
-}
-
-let NormalDistribution2D = function(props) {
-    let cs = props.color;
-    let color = `rgba(${cs[0]}, ${cs[1]}, ${cs[2]}, ${'3' in cs ? cs[3] : 1})`;
-    return (
-        <div>
-            {props.data.map((pt, i) =>
-                (<DataPoint key={i}
-                    size={props.size}
-                    color={color}
-                    x={pt[0]}
-                    y={pt[1]} />)
-            )}
-        </div>
-    );
-}
-
-var LossChooser = function (props) {
-    return (
-        <label>Loss
-            <select onChange={props.onChange} defaultValue={props.loss}>
-                <option value="bic">BIC</option>
-                <option value="aic">AIC</option>
-                <option value="mse">MSE</option>
-            </select>
-        </label>
-    );
-}
-
-class XMeansParams extends React.Component {
+class SampleGaussian extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {
-            loss: 'bic',
-            maxk: 100,
-            mink: 1
-        };
-
-        this.onLossChange.bind(this);
-        this.onMaxKChange.bind(this);
-        this.onMinKChange.bind(this);
+        this.data;
     }
 
-    onLossChange(e) {
-        let st = this.state;
-        st.loss = e.target.value;
-        this.setState(st);
-    }
-
-    onMaxKChange(e) {
-        let st = this.state;
-        st.maxk = e.target.value;
-        this.setState(st);
-    }
-
-    onMinKChange() {
-        let st = this.state;
-        st.mink = e.target.value;
-        this.setState(st);
-    }
-
-    onClick() {
-        this.props.onChange(this.state);
+    _sample(props) {
+        let { width, height, samples, distribs, seed } = props;
+        if (seed == this.seed) {
+            return this.data;
+        }
+        this.seed = seed;
+        let data = GaussianSampler.sample(width, height, samples, distribs);
+        this.data = data;
+        return data;
     }
 
     render() {
-        return (
-            <div>
-                <h3>X-Means</h3>
-                <LossChooser
-                    onChange={(e) => this.onLossChange(e)}
-                    loss={this.state.loss} />
-                <br/>
-                <label>
-                    Max K
-                    <input
-                        onChange={(e) => this.onMaxKChange(e)}
-                        size="3"
-                        type="number"
-                        value={this.state.maxk}/>
-                </label>
-                <br/>
-                <label>
-                    Min K
-                    <input
-                        onChange={(e) => this.onMinKChange(e)}
-                        size="3"
-                        type="number"
-                        value={this.state.mink}/>
-                </label>
-                <br/>
-                <button onClick={() => this.onClick()}>Go</button>
-            </div>
-        );
+        let res = this._sample(this.props);
+        return this.props.children(res);
     }
-}
+};
 
-class KMeansParams extends React.Component {
+class XMeansCalculator extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {
-            loss: 'bic',
-            maxk: 10,
-            tries: 100,
-            selector: 'd2'
-        };
-
-        this.onLossChange.bind(this);
-        this.onMaxKChange.bind(this);
-        this.onTriesChange.bind(this);
-        this.onSelectorChange.bind(this);
+        this.state = {};
     }
 
-    onLossChange(e) {
+    _startXMeans(mixedData, params) {
+        window.clearTimeout(this.xmCb);
+
+        this.xm = new XMeans(mixedData, params.mink, params.maxk, params.loss);
+        let res = this.xm.getRes();
+        this.xmCb = setTimeout(() => this._optimizeXM(), 0);
+    }
+
+    _optimizeXM() {
+        if (this.xm.ended()) {
+            return;
+        }
+        this.xm.step();
         let st = this.state;
-        st.loss = e.target.value;
+        st.centroids = this.xm.getRes().centroids;
         this.setState(st);
+        this.xmCb = setTimeout(() => this._optimizeXM(), 50);
     }
 
-    onMaxKChange(e) {
-        let st = this.state;
-        st.maxk = e.target.value;
-        this.setState(st);
-    }
-
-    onTriesChange(e) {
-        let st = this.state;
-        st.tries = e.target.value;
-        this.setState(st);
-    }
-
-    onSelectorChange(e) {
-        let st = this.state;
-        st.selector = e.target.value;
-        this.setState(st);
-    }
-
-    onClick() {
-        this.props.onChange(this.state);
+    runXMeans(data, params) {
+        if (this.props.seed === this.seed) {
+            return this.state;
+        }
+        this.seed = this.props.seed;
+        this._startXMeans(data, params);
     }
 
     render() {
-        return (
-            <div>
-                <h3>K-Means</h3>
-                <LossChooser
-                    onChange={(e) => this.onLossChange(e)}
-                    loss={this.state.loss} />
-                <br/>
-                <label>Selector
-                    <select
-                        onChange={e => this.onSelectorChange(e)}
-                        defaultValue={this.state.selector}>
-                        <option value="d2">Elbow</option>
-                        <option value="best">Best</option>
-                    </select>
-                </label>
-                <br/>
-                <label>
-                    Max K
-                    <input
-                        onChange={(e) => this.onMaxKChange(e)}
-                        size="3"
-                        type="number"
-                        value={this.state.maxk}/>
-                </label>
-                <br/>
-                <label>
-                    Tries per K
-                    <input
-                        onChange={(e) => this.onTriesChange(e)}
-                        size="3"
-                        type="number"
-                        value={this.state.tries}/>
-                </label>
-                <br/>
-                <button onClick={() => this.onClick()}>Go</button>
-            </div>
-        );
+        this.runXMeans(this.props.data, this.props.params);
+        return this.props.children(this.state);
     }
 }
 
 class App extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {distribs: []};
+        this.state = {seed: 0};
+        this.onXMParamsChange = this.onXMParamsChange.bind(this);
+        this.onKMParamsChange = this.onKMParamsChange.bind(this);
     }
 
     componentWillMount() {
         this.componentWillReceiveProps(this.props);
-    }
-
-    generateParams(np) {
-        let ds = [];
-        for (let i = 0; i < np.distribs; ++i) {
-            ds.push({
-                samples: Math.round(100 * Math.random()),
-                muX: Math.random() * np.width,
-                muY: Math.random() * np.height,
-                sigmaX: 500 * Math.random(),
-                sigmaY: 500 * Math.random(),
-                color: [
-                    Math.round(Math.random() * 255),
-                    Math.round(Math.random() * 255),
-                    Math.round(Math.random() * 255)
-                ]
-            });
-        }
-        return ds;
-    }
-
-    generateData(props) {
-        return (Array.from(new Array(props.samples), () => {
-            return [
-                this.rnd(props.muX, props.sigmaX),
-                this.rnd(props.muY, props.sigmaY)
-            ];
-        }));
-    }
-
-    startXMeans(mixedData, params) {
-        window.clearTimeout(this.xmCb);
-        this.xm = new XMeans(mixedData, params.mink, params.maxk, params.loss);
-        let res = this.xm.getRes();
-        this.xmCb = setTimeout(() => this.optimizeXM(), 0);
     }
 
     startKMeans(mixedData, params) {
@@ -254,20 +90,7 @@ class App extends React.Component {
     }
 
     componentWillReceiveProps(np) {
-        this.start(np);
-    }
-
-    start(np) {
-        let ds = this.generateParams(np);
-        let data = ds.map(props => this.generateData(props));
-
-        this.mixedData = [].concat.apply([], data);
-        this.setState({
-            distribs: ds,
-            data: data,
-            kmRes: [],
-            xmRes: []
-        });
+        //this.start(np);
     }
 
     optimizeKM() {
@@ -281,80 +104,76 @@ class App extends React.Component {
         this.kmCb = setTimeout(() => this.optimizeKM(), 0);
     }
 
-    optimizeXM() {
-        if (this.xm.ended()) {
-            console.log('K FOR XM: ' + this.state.xmRes.length);
-            return;
-        }
-        this.xm.step();
-        let st = this.state;
-        st.xmRes = this.xm.getRes().centroids;
-        this.setState(st);
-        this.xmCb = setTimeout(() => this.optimizeXM(), 50);
-    }
-
-    rnd(mu, sigma) {
-        let t = 0;
-        let n = 8;
-        for (let i = 0; i < n; ++i) {
-            t += Math.random();
-        }
-        return (t - (n / 2)) / (n / 2) * sigma + mu;
-    }
-
     onXMParamsChange(params) {
-        this.startXMeans(this.mixedData, params);
+        let st = this.state;
+        st.xmParams = params;
+        st.xmSeed = (st.xmSeed || 0) + 1;
+        this.setState(st);
+    }
+
+    regenData() {
+        let st = this.state;
+        st.seed = (st.seed || 0) + 1;
+        this.setState(st);
     }
 
     onKMParamsChange(params) {
         this.startKMeans(this.mixedData, params);
     }
 
-    regenerateData() {
-        this.start(this.props);
-    }
-
     render() {
         return (
             <div>
-                <div style={{float: 'right', width: 200}}>
-                    <div>Green: K-Means</div>
-                    <div>Red: X-Means</div>
-                    <button onClick={() => this.regenerateData()}>
-                        Generate Data
-                    </button>
-                    <XMeansParams onChange={p => this.onXMParamsChange(p)}/>
-                    <KMeansParams onChange={p => this.onKMParamsChange(p)}/>
-                    <a href="https://github.com/Vermeille/KMeans">
-                        Based on Vermeille/KMeans
-                    </a>
-                </div>
-                <div style={{position: 'relative',
-                            borderStyle: 'solid',
-                            width: this.props.width,
-                            height: this.props.height
-                            }} >
-                    {this.state.distribs.map((d, i) =>
-                        (<NormalDistribution2D
-                            key={i}
-                            color={d.color}
-                            data={this.state.data[i]} />)
-                    )}
-                    <NormalDistribution2D
-                            size="30px"
-                            color={[0, 255, 0]}
-                            data={this.state.kmRes} />
-                    <NormalDistribution2D
-                            size="30px"
-                            color={[255, 0, 0, 0.5]}
-                            data={this.state.xmRes} />
-                </div>
+                <ParamsUI
+                    onGenData={() => this.regenData()}
+                    onXParamsChange={this.onXMParamsChange}
+                    onKParamsChange={this.onKMParamsChange} />
+
+                <SampleGaussian
+                    width={this.props.width}
+                    height={this.props.height}
+                    samples={this.props.samples}
+                    distribs={this.props.distribs}
+                    seed={this.state.seed}>
+
+                        {({distribs, data, mixedData}) =>
+                            <div style={{position: 'relative',
+                                        borderStyle: 'solid',
+                                        width: this.props.width,
+                                        height: this.props.height
+                                        }} >
+                                {distribs.map((d, i) =>
+                                    (<NormalDistribution2D
+                                        key={i}
+                                        color={d.color}
+                                        data={data[i] || []} />)
+                                )}
+                                <NormalDistribution2D
+                                        size="30px"
+                                        color={[0, 255, 0]}
+                                        data={this.state.kmRes || []} />
+                                {this.state.xmParams &&
+                                    <XMeansCalculator
+                                        data={mixedData}
+                                        seed={this.state.xmSeed}
+                                        params={this.state.xmParams}>
+                                        {({centroids }) =>
+                                            <NormalDistribution2D
+                                                    size="30px"
+                                                    color={[255, 0, 0, 0.5]}
+                                                    data={centroids || []} />
+                                        }
+                                    </XMeansCalculator>
+                                }
+                            </div>
+                        }
+                </SampleGaussian>
             </div>
         );
     }
 }
 
 ReactDOM.render(
-    <App height="800" width="900" distribs={5}/>,
+    <App height={800} width={900} samples={100} distribs={5}/>,
     document.getElementById('app')
 );
